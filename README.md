@@ -32,53 +32,78 @@ These are the terms I will be using throughout:
 
 ### Functionality in general
 
-I think these are the more interesting functionalities that are worth exploring in depth. I'm trying limit myself to "what" here but sometimes it's impossible not to point out the potential challenges.
+I think these are the more interesting functionalities that are worth exploring in depth.
 
 1. Auctioneer manages their auctions
-
-    Auctioneers can decide if the minimal price is visible to the bidders. If that's what they opt for, maybe we also want to show the clock to the bidders.
-
-    How we store auctions really depends on how fast and to how broad bidder audience we want to show them.
-
 2. Auction starts
-
-    Wait, so there's a concept of a clock here? Needs to be snchronized? Central?
-
 3. Bidder lists and views auctions
-
-    Most of the auction page is static really. Some text and some pictures. But the current price and the clock are often changing.
-
-    We probably want to let the bidders know about price changes and that an auction has ended immediatelly while they're still on the auction page.
-
-    As the current price decreases, more bidders will most likely be insterested in that particular auction and so that page will get visited more. Did we just find a potential peak period?
-
-    What about searching?
-
 4. Current price is decreased by the increment as the clock progresses
-
-    If there's an eligible proxy bidding, the auction ends immediately with a transaction. If the previous current price was indeed a minimal price, the auction ends without any bids. Otherwise a new current price gets displayed on the auction page.
-
-    In all these cases the bidders, or people who are viewing the auction page, should probably be notified.
-
 5. Bidder sets up a proxy bidding
-
-    Only possible when the auction is in progress.
-
-    The bid should not be lower than the minimal price. If the minimal price is hidden there's a possibility for the bidders to sniff it with this option, if incorrectly implemeted.
-
 6. Bidder offers a bid and auction ends with transaction
 
-    Once the aution ends we should immediatelly disable the option to submit a bidding.
+In order to simplify our analysis I will skip the moderation, transaction processing and commissions for now.
 
-    The challenge here is a race condition when possibly multiple bidders will hit the Buy now button at (close to) the same time. Adds to the argument for syncing the clock.
+Since they're rather commonly implemented, I've chosen to ignore things like user registration and authentication.
 
-    Besides properly selecting the first one who decided to make a purchase we need to gracefully inform the bidders who managed to hit Buy now but still did not make it on time.
+### Looking closer at what happens
 
-Since they're rather commonly implemented, I've chosen to ignore things like user registration and authentication. I'm still debating if I should talk about processing the transaction and commissions.
+Now I'm going to zoom in to find out what events take place within our Dutch auction system. I'm trying limit myself to "what" here but sometimes it's impossible not to point out the potential challenges.
 
-### Thinking events
+#### Auctioneer manages their auctions
 
-...
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/manage-auctions.png)
+
+Auctioneers can decide if the minimal price is visible to the bidders. If that's what they opt for, maybe we also want to show the clock to the bidders.
+
+How we store auctions really depends on how fast and to how broad bidder audience we want to show them.
+
+Publishing an auction makes it visible to the bidders.
+
+In case the auction should start immediately we should ~~also start the clock immediately~~ defer to some kind of schedule anyway.
+
+#### Auction starts
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/start-auction.png)
+
+Auction can start immediately after it was polished or at a specific start date and time. That depends on how the auctioneer set it up.
+
+Wait, so there's a concept of a clock here? Needs to be synchronized? Central?
+
+#### Bidder lists and views auctions
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/view-auctions.png)
+
+Most of the auction page is static really. Some text and some pictures. But the current price and the clock are often changing.
+
+We probably want to let the bidders know about price changes and that an auction has ended immediately while they're still on the auction page.
+
+As the current price decreases, more bidders will most likely be interested in that particular auction and so that page will get visited more. Did we just find a potential peak period?
+
+What about searching?
+
+#### Current price is decreased by the increment as the clock progresses
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/decrement-current-price.png)
+
+If the previous current price was indeed a minimal price, the auction ends without any bids. If there's an eligible proxy bidding, the auction ends immediately with a transaction. Otherwise a new current price gets displayed on the auction page.
+
+In all these cases the bidders, or people who are viewing the auction page, should probably be notified.
+
+#### Bidder sets up a proxy bidding
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/submit-proxy-bidding.png)
+
+Only possible when the auction is in progress.
+
+The bid should not be lower than the minimal price. If the minimal price is hidden there's a possibility for the bidders to sniff it with this option, if incorrectly implemented.
+
+#### Bidder offers a bid and auction ends with transaction
+
+Once the auction ends we should immediately disable the option to submit a bidding.
+
+The challenge here is a race condition when possibly multiple bidders will hit the Buy now button at (close to) the same time. Adds to the argument for syncing the clock.
+
+Besides properly selecting the first one who decided to make a purchase we need to gracefully inform the bidders who managed to hit Buy now but still did not make it on time.
 
 ### Possible abuse
 
