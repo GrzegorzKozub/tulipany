@@ -99,6 +99,8 @@ The bid should not be lower than the minimal price. If the minimal price is hidd
 
 #### Bidder offers a bid and auction ends with transaction
 
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/buy-now.png)
+
 Once the auction ends we should immediately disable the option to submit a bidding.
 
 The challenge here is a race condition when possibly multiple bidders will hit the Buy now button at (close to) the same time. Adds to the argument for syncing the clock.
