@@ -34,12 +34,12 @@ These are the terms I will be using throughout:
 
 I think these are the more interesting functionalities that are worth exploring in depth.
 
-1. Auctioneer manages their auctions
-2. Auction starts
-3. Bidder lists and views auctions
-4. Current price is decreased by the increment as the clock progresses
-5. Bidder sets up a proxy bidding
-6. Bidder offers a bid and auction ends with transaction
+* Auctioneer manages their auctions
+* Auction starts
+* Bidder lists and views auctions
+* Current price is decreased by the increment as the clock progresses
+* Bidder sets up a proxy bidding
+* Bidder offers a bid and auction ends with transaction
 
 In order to simplify our analysis I will skip the search, moderation, transaction processing and commissions for now.
 
@@ -79,7 +79,7 @@ Auction can start immediately after it was polished or at a specific start date 
 
 **Changes when iterating**
 
-* When handling a scheduled start auction command, the scheduler creates a new schedule to decrement the current price. Is this idea error-prone? Would it be better to setup the whole schedule for all decrements up front and potentially remove it when the auction ends? Probably it would also simplify the code and allow better SRP. Let's remove Decrement Scheduled then and redefine Auction Scheduled from the previous section.
+* When handling a scheduled start auction command, the scheduler creates a new schedule to decrement the current price. Is this idea error-prone? Would it be better to setup the whole schedule for all increments up front and potentially remove it when the auction ends? Probably it would also simplify the code and allow better SRP. Let's remove Decrement Scheduled then and redefine Auction Scheduled from the previous section.
 
 #### Bidder lists and views auctions
 
@@ -143,3 +143,138 @@ The challenges that I was able to see from drawing the UI were already identifie
 
 If I trust [these conclusions](https://clemens.pl/aukcje-holenderskie#bezpieczenstwo), in contrast to classic auctions, Dutch auctions are less prone to the common unfair practices.
 
+## Solving it
+
+Having taken a look at the domain, I can attempt to draft a proposal for the solution.
+
+### Contexts and their functions
+
+Looking at the above I will now aim to distil the contexts. I will mainly consider the following factors:
+
+* Potential change to our system should ideally affect just one of the contexts
+* Load and scalability requirements should be consistent within a single context
+
+My guts suggest me these initial contexts:
+
+#### Management
+
+**Functionality**
+
+* Creating, editing and removing auctions by the auctioneer
+* Publishing and unpublishing auctions
+* Calculating auction schedules
+
+**Discussion**
+
+Deserves to be there because of a distinct actor, the auctioneer, and because managing auctions will happen considerably less often than viewing and bidding (different scalability).
+
+Groups events that always happen together: management, publishing and scheduling.
+
+**Ideas**
+
+An auction will be stored as a set of relational data including its basic properties and a schedule. On top of that we will store the pre-rendered, static version for fast access. Might consider a light version for the list.
+
+#### Pages
+
+**Functionality**
+
+* Listing auctions by the bidders
+* Viewing auction pages by the bidders
+* Subscribing to the page updates automatically
+* Exposing the bidding and notification buttons
+
+**Discussion**
+
+We're servicing a specific event here: a bidder views the auction page. Considering the previously identified challenges, we can expect high load not only in peak times but also simply because we want to have much more bidders than auctioneers. The other source of increased load will come from refreshing the page by a single bidder just to make sure the price did not drop yet. This will drive how we scale this one.
+
+**Ideas**
+
+This context is mainly interested in the pre-rendered static content that it will display on the client. That's really its distinct perspective on the auction entity. We should maybe provide it from memory and distribute it geographically?
+
+When the page it will fetch the current price and the clock from the server and subscribe to the updates of these details in (close to) real time.
+
+#### Updates
+
+**Functionality**
+
+* Keeping pages up to date regarding current price and the clock
+
+**Discussion**
+
+This will need to scale similarly to Pages. On the other hand it's not the bidder who usually initiates the action here. It's the clock in most cases.
+
+Initially this context was merged with Notifications. Since there may be considerably less bidders subscribed to notifications than bidders who simply view the page, we may need to scale differently.
+
+**Ideas**
+
+I think this will be just some kind of API that the clients will connect to to and subscribe to the updates via Web Sockets.
+
+**New challenges**
+
+* How will Updates know about the actual changes it needs to forward?
+
+#### Notifications
+
+**Functionality**
+
+* Sending notifications to the subscribers
+
+**Discussion**
+
+Very similar to Updates but was extracted due to potentially different scalability needs.
+
+#### Scheduling
+
+**Functionality**
+
+* Creating schedules
+* Starting auctions
+* Calculating the increment
+* Decrementing current price
+* Checking proxy biddings
+* Checking minimum price
+* Creating transactions
+* Removing schedules
+
+**Discussion**
+
+Seems like there's multiple unrelated functionalities in this context. I decided to put all of them into one because most of them happen at the same time, when the next current price increment needs to happen. Also, probably better to keep schedule logic in one place due to potential changes.
+
+For now there's no compelling reason for further split. Later, when we consider transaction handling it may be smarter to move the related logic to that context.
+
+**Ideas**
+
+This seems like a background task to me. It can employ an existing scheduler library like quantum that's using familiar crontab metaphor. 
+
+We probably don't want to put all auctions into a single schedule. We should find a way to partition.
+
+After starting an auction and decrementing the current price we need to update the pages and notify the bidders via Updates context. Maybe we could use events here? Would this address the challenge we noticed with the Updates API?
+
+#### Bidding
+
+**Functionality**
+
+* Accepting proxy biddings
+* Processing buy now requests
+
+**Discussion**
+
+Scales similarly to Updates but the initiator is the bidder.
+
+Proxy biddings have been put here due to domain similarities but I can't find any compelling scalability reason. Might want to change it later.
+
+**Ideas**
+
+Tackling the challenge of making sure we make the indeed first bidder who hits the Buy now button successful, maybe we could do something very light when accepting that request, like saving the winner ID. This would allow us to lock this operation so the others would wait and then quickly get the negative response.
+
+If we go this route, we would then handle actions that are not urgent (updating pages, sending notifications, creating transactions) asynchronously.
+
+We need to consider that if we update the pages quickly enough, then we actually get less Buy now requests in the first place.
+
+### Syncing the clock
+
+...
+
+## Conclusions
+
+Maybe it would be better to distinct between an auction viewer and a bidder.
