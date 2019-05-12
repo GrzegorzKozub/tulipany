@@ -107,10 +107,19 @@ The challenge here is a race condition when possibly multiple bidders will hit t
 
 Besides properly selecting the first one who decided to make a purchase we need to gracefully inform the bidders who managed to hit Buy now but still did not make it on time.
 
+### User interface
+
+I would like to have mobile and desktop clients which makes me want to put as much business logic as possible on he server and expose it via the APIs to the UIs that are only responsible for displaying the data really. Here's how I would imagine the UI would roughly look:
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/ui.png)
+
+Challenges:
+
+* Clock synchronization that shows the same current price and time remaining to all the bidders 
+* Disabling the purchase options as soon as the auction ends
+* Potential high number of concurrent viewers which will impact the server load and increase the burden on the clock sync solution
+
 ### Possible abuse
 
 If I trust [these conclusions](https://clemens.pl/aukcje-holenderskie#bezpieczenstwo), in contrast to classic auctions, Dutch auctions are less prone to the common unfair practices.
 
-## User's point of view
-
-...
