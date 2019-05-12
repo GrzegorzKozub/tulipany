@@ -41,7 +41,7 @@ I think these are the more interesting functionalities that are worth exploring 
 5. Bidder sets up a proxy bidding
 6. Bidder offers a bid and auction ends with transaction
 
-In order to simplify our analysis I will skip the moderation, transaction processing and commissions for now.
+In order to simplify our analysis I will skip the search, moderation, transaction processing and commissions for now.
 
 Since they're rather commonly implemented, I've chosen to ignore things like user registration and authentication.
 
@@ -59,7 +59,13 @@ How we store auctions really depends on how fast and to how broad bidder audienc
 
 Publishing an auction makes it visible to the bidders.
 
-In case the auction should start immediately we should ~~also start the clock immediately~~ defer to some kind of schedule anyway.
+**New challenges**
+
+* I will need a scheduler, possibly with a centralized clock
+
+**Changes when iterating**
+
+* In case the auction should start immediately we should ~~also start the clock immediately~~ defer to some kind of schedule anyway.
 
 #### Auction starts
 
@@ -67,7 +73,13 @@ In case the auction should start immediately we should ~~also start the clock im
 
 Auction can start immediately after it was polished or at a specific start date and time. That depends on how the auctioneer set it up.
 
-Wait, so there's a concept of a clock here? Needs to be synchronized? Central?
+**New challenges**
+
+* Updating the currently open auction page for all the current viewers will likely require an ongoing connection via something similar to Web Sockets so that the server can send the updates immediately. This will put a burden on the server when there's many concurrent viewers. 
+
+**Changes when iterating**
+
+* When handling a scheduled start auction command, the scheduler creates a new schedule to decrement the current price. Is this idea error-prone? Would it be better to setup the whole schedule for all decrements up front and potentially remove it when the auction ends? Probably it would also simplify the code and allow better SRP. Let's remove Decrement Scheduled then and redefine Auction Scheduled from the previous section.
 
 #### Bidder lists and views auctions
 
@@ -77,9 +89,9 @@ Most of the auction page is static really. Some text and some pictures. But the 
 
 We probably want to let the bidders know about price changes and that an auction has ended immediately while they're still on the auction page.
 
-As the current price decreases, more bidders will most likely be interested in that particular auction and so that page will get visited more. Did we just find a potential peak period?
+**New challenges**
 
-What about searching?
+* As the current price decreases, more bidders will most likely be interested in that particular auction and so that page will get visited more. Did we just find a potential peak period?
 
 #### Current price is decreased by the increment as the clock progresses
 
@@ -88,6 +100,11 @@ What about searching?
 If the previous current price was indeed a minimal price, the auction ends without any bids. If there's an eligible proxy bidding, the auction ends immediately with a transaction. Otherwise a new current price gets displayed on the auction page.
 
 In all these cases the bidders, or people who are viewing the auction page, should probably be notified.
+
+**New challenges**
+
+* For this system to remain fair, all the bidders should see the new price as close to the same time as possible. This adds to the argument for synchronizing the clock.
+* Minimal price and proxy bidding checks should be quick but will still require a non-zero amount of time. Maybe it's a good idea to lock the auction at every scheduled increment. This lock should not be noticed by the users.
 
 #### Bidder sets up a proxy bidding
 
@@ -103,9 +120,12 @@ The bid should not be lower than the minimal price. If the minimal price is hidd
 
 Once the auction ends we should immediately disable the option to submit a bidding.
 
-The challenge here is a race condition when possibly multiple bidders will hit the Buy now button at (close to) the same time. Adds to the argument for syncing the clock.
-
 Besides properly selecting the first one who decided to make a purchase we need to gracefully inform the bidders who managed to hit Buy now but still did not make it on time.
+
+**New challenges**
+
+* There is a race condition when possibly multiple bidders will hit the Buy now button at (close to) the same time. Adds to the argument for syncing the clock.
+* The API handling the Buy now button should expect peaks close to the scheduled current price increments for auctions with clock visible.
 
 ### User interface
 
@@ -113,7 +133,7 @@ I would like to have mobile and desktop clients which makes me want to put as mu
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/ui.png)
 
-Challenges:
+The challenges that I was able to see from drawing the UI were already identified, namely:
 
 * Clock synchronization that shows the same current price and time remaining to all the bidders 
 * Disabling the purchase options as soon as the auction ends
