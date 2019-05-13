@@ -97,6 +97,8 @@ We probably want to let the bidders know about price changes and that an auction
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/decrement-current-price.png)
 
+For simplicity and to make things clearer for the users, we always increment ever hour. The increment amount will differ.
+
 If the previous current price was indeed a minimal price, the auction ends without any bids. If there's an eligible proxy bidding, the auction ends immediately with a transaction. Otherwise a new current price gets displayed on the auction page.
 
 In all these cases the bidders, or people who are viewing the auction page, should probably be notified.
@@ -212,6 +214,7 @@ I think this will be just some kind of API that the clients will connect to to a
 *New challenges*
 
 * How will Updates know about the actual changes it needs to forward?
+* There will be multiple users keeping auction pages open for long time. Auctions can be configured to last for over a month. We will have multiple open connections that are very long lasting.
 
 #### Notifications
 
@@ -244,7 +247,7 @@ For now there's no compelling reason for further split. Later, when we consider 
 
 *Ideas*
 
-This seems like a background task to me. It can employ an existing scheduler library like quantum that's using familiar crontab metaphor. 
+This seems like a background task to me. It can employ an existing scheduler library like [quantum](https://hex.pm/packages/quantum) that's using familiar crontab metaphor. 
 
 We probably don't want to put all auctions into a single schedule. We should find a way to partition.
 
@@ -273,8 +276,19 @@ We need to consider that if we update the pages quickly enough, then we actually
 
 ### Syncing the clock
 
-...
+Time seems to be important from the point of view of fairness and user experience. 
+
+#### Ensuring every node's time is the same
+
+When we scale different contexts of the system, it becomes important so that each node has the same time. This is especially important for the Scheduling context.
+
+A node is not something that would live forever but maybe long enough to consider potential discrepancies over time. Ensuring proper use of [NTP](https://en.wikipedia.org/wiki/Network_Time_Protocol) should alleviate this problem.
+
+#### Syncing user's clocks
+
+For the scenario when the clock is displayed on the auction page, we can refresh it when updating the current price. This means every hour which is more than enough.
 
 ## Conclusions
 
 * Maybe it would be better to distinct between an auction viewer and a bidder.
+* It's hard to do this in a one man team. I tried to challenge my own ideas constantly. This is tiring and my skills and knowledge into goes this far. These designs should be team efforts to increase the chance of success.
