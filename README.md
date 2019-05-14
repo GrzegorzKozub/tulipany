@@ -11,7 +11,7 @@ I will use the following sources for the functionality I would like to provide:
 
 Hope you like it!
 
-## Glossary
+## The language
 
 These are the terms I will be using throughout:
 
@@ -139,7 +139,7 @@ The challenges that I was able to see from drawing the UI were already identifie
 
 If I trust [these conclusions](https://clemens.pl/aukcje-holenderskie#bezpieczenstwo), in contrast to classic auctions, Dutch auctions are less prone to the common unfair practices.
 
-## Drafting the contexts
+## Coming up with bounded contexts
 
 Looking at the above I will now aim to distil the contexts. I will mainly consider the following factors:
 
@@ -155,6 +155,7 @@ My guts suggest me these initial contexts:
 * Creating, editing and removing auctions by the auctioneer
 * Publishing and unpublishing auctions
 * Calculating auction schedules
+* Calculating the increment
 
 **Discussion**
 
@@ -206,43 +207,6 @@ I think this will be just some kind of API that the clients will connect to to a
 * How will Updates know about the actual changes it needs to forward?
 * There will be multiple users keeping auction pages open for long time. Auctions can be configured to last for over a month. We will have multiple open connections that are very long lasting.
 
-### Notifications
-
-**Functionality**
-
-* Sending notifications to the subscribers
-
-**Discussion**
-
-Very similar to Updates but was extracted due to potentially different scalability needs.
-
-### Scheduling
-
-**Functionality**
-
-* Creating schedules
-* Starting auctions
-* Calculating the increment
-* Decrementing current price
-* Checking proxy biddings
-* Checking minimum price
-* Creating transactions
-* Removing schedules
-
-**Discussion**
-
-Seems like there's multiple unrelated functionalities in this context. I decided to put all of them into one because most of them happen at the same time, when the next current price increment needs to happen. Also, probably better to keep schedule logic in one place due to potential changes.
-
-For now there's no compelling reason for further split. Later, when we consider transaction handling it may be smarter to move the related logic to that context.
-
-**Ideas**
-
-This seems like a background task to me. It can employ an existing scheduler library like [quantum](https://hex.pm/packages/quantum) that's using familiar crontab metaphor. 
-
-We probably don't want to put all auctions into a single schedule. We should find a way to partition.
-
-After starting an auction and decrementing the current price we need to update the pages and notify the bidders via Updates context. Maybe we could use events here? Would this address the challenge we noticed with the Updates API?
-
 ### Bidding
 
 **Functionality**
@@ -264,6 +228,136 @@ If we go this route, we would then handle actions that are not urgent (updating 
 
 We need to consider that if we update the pages quickly enough, then we actually get less Buy now requests in the first place.
 
+### Increments
+
+**Functionality**
+
+* Starting auctions
+* Decrementing current price
+* Checking proxy biddings
+* Checking minimum price
+* Creating transactions
+* Removing schedules
+
+**Discussion**
+
+Seems like there's multiple unrelated functionalities in this context. I decided to put all of them into one because most of them happen at the same time, when the next current price increment needs to happen.
+
+For now there's no compelling reason for further split. Later, when we consider transaction handling it may be smarter to move the related logic to that context.
+
+**Ideas**
+
+This seems like a background task to me. It can employ an existing scheduler library like [quantum](https://hex.pm/packages/quantum) that's using familiar crontab metaphor. 
+
+We probably don't want to put all auctions into a single schedule. We should find a way to partition.
+
+After starting an auction and decrementing the current price we need to update the pages and notify the bidders via Updates context. Maybe we could use events here? Would this address the challenge we noticed with the Updates API?
+
+### Notification
+
+**Functionality**
+
+* Sending notifications to the subscribers
+
+**Discussion**
+
+Very similar to Updates but was extracted due to potentially different scalability needs.
+
+## Tackling the architecture
+
+In my attempt to consider all these contexts and address the challenges I would propose something similar to the following unideal and incomplete architecture.
+
+### First attempt
+
+The following picture presents my first attempt. I opted not to use events to keep things simple but I found myself unable to come up with robust way of collaboration between the components. Maybe there's too many of them. I don't think so though.
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/first-architecture.png)
+
+So I introduced domain events.
+
+### Components
+
+Looking at the bounded contexts I came up with this list of components.
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/components.png)
+
+Note that for brevity I skipped hosting and serving the web client.
+
+**Do I really need the event bus**
+
+In most cases each context contains an API and a background service. They would communicate via domain events. Now this may be an overkill and we could possibly use something like web hooks or API calls (synchronous domain events?). We would trade temporal coupling here though.
+
+**Single database**
+
+I would opt for a single database at the beginning. Smart schemas corresponding to the bounded contexts will allow us to split it apart later if need arises.
+
+I would also introduce sharding as soon as possible. I think in this case driven by geography to prepare us to migrate the data to proper data centres in future. Another option would be to find a sharding key that would distribute the load evenly.
+
+**Static content**
+
+We could pre-render auction text and images and store it in some high availability in-memory cluster like Redis to speed up page load times.
+
+**What is updates db**
+
+This is the dynamic part of auction data, like current price, clock, if the action is still open etc. This data is also viewed on the auction page by the bidders and I would like to keep it updated as frequently as possible. Maybe a similar in-memory solution would help?
+
+Let's look at how these components handle the context functionality.
+
+### Management
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/management-context.png)
+
+When an auctioneer modifies an auction, Management API stores it in the relational database and drops an event. 
+
+Then Management Service takes over. It will render the static content and put it into the in-memory cluster. It will also update the in-memory cluster with the auction status. Finally, it will drop Auction Published event.
+
+### Pages and Updates
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/pages-and-updates-contexts.png)
+
+We load the auction list and static content from "static" in-memory cluster. Then we fetch the current price and clock from "dynamic" in-memory cluster.
+
+There are two options for keeping once open auction page up to date regarding this dynamic data:
+
+* Keeping an open Web Socket connection and feeding the web client back leveraging the domain events as to when. This will make the viewers most up to date but it will cost us a lot of open connections at the same time.
+* Periodically checking Updates API from the clients. Less ideal for the users and not really ideal for the load we will cause to ourselves. Depending on the poll period.
+
+Since keeping the service up takes priority over user experience I would opt for not so dense API polling. Granted, I don't have any experience with Web Sockets.
+
+### Bidding 
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/bidding-context.png)
+
+Bidding API accepts two kinds of requests.
+
+When a bidder hits Buy now, then we check and update the "dynamic" in-memory store as quick as possible to eliminate the need of locking anything for too long. Then an event is dropped so that Bidding Service can follow up in an asynchronous manner to propagate closing the auction. It will also start creating the transaction.
+
+Another request is to submit a proxy bidding. In this case Bidding API will simply save this fact in the relational database.
+
+### Increments
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/increments-context.png)
+
+It starts with an Auction Published event from Management Service. This is when the scheduler that lives inside the Increment Service loads or updates the schedule for that specific auction.
+
+Then, upon each scheduled increment that same service will check proxy biddings and minimal price. These checks will result in either just applying an increment or ending the auction. In both cases an event will be sent so that other services can update their state.
+
+Increment Service listens to Bought Now events in order to stop the related auction schedule.
+
+I would like this service to be scaled horizontally. Each instance would need to have some kind of schedule affinity so that only one is processing a specific auction at a given time. When an instance dies we will need to load the abandoned schedules into the new one immediately. This may not suffice time-wise. We may want the other instances to take over the dropped schedules.
+
+### Notification
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/notification-context.png)
+
+I think the only thing worth mentioning here is that the notifications will likely be sent using an external provider or as push notifications if we're talking about the mobile clients.
+
+### Component dependencies
+
+Based on the above, I think this will be the approximate dependency diagram on the deployable component level.
+
+![](https://github.com/GrzegorzKozub/tulipany/raw/master/component-dependencies.png)
+
 ## Syncing the clock
 
 Time seems to be important from the point of view of fairness and user experience. 
@@ -282,9 +376,15 @@ For the scenario when the clock is displayed on the auction page, we can refresh
 
 To avoid problems with the browser settings I would initially put user's time zone as a configuration item on their profile.
 
-## Architecture
+## Important non-functional requirements
 
-...
+### Testing
+
+### Logging
+
+### Monitoring
+
+### Telemetry
 
 ## Conclusions
 
