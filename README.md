@@ -11,11 +11,7 @@ I will use the following sources for the functionality I would like to provide:
 
 Hope you like it!
 
-## Exploring the domain
-
-I started from the problem space, meaning the domain. In this section I'm aiming to show you which functionality I have selected and how I understand they should work.
-
-### The language
+## Glossary
 
 These are the terms I will be using throughout:
 
@@ -30,7 +26,9 @@ These are the terms I will be using throughout:
 * Transaction - the actual fact of making the purchase
 * Commission - paid by the auctioneer when an auction ends with transaction
 
-### Functionality in general
+## Exploring the domain
+
+I started from the problem space, meaning the domain. In this section I'm aiming to show you which functionality I have selected and how I understand they should work.
 
 I think these are the more interesting functionalities that are worth exploring in depth.
 
@@ -45,11 +43,7 @@ In order to simplify our analysis I will skip the search, moderation, transactio
 
 Since they're rather commonly implemented, I've chosen to ignore things like user registration and authentication.
 
-### Looking closer at what happens
-
-Now I'm going to zoom in to find out what events take place within our Dutch auction system. I'm trying limit myself to "what" here but sometimes it's impossible not to point out the potential challenges.
-
-#### Auctioneer manages their auctions
+### Auctioneer manages their auctions
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/manage-auctions.png)
 
@@ -59,21 +53,21 @@ How we store auctions really depends on how fast and to how broad bidder audienc
 
 Publishing an auction makes it visible to the bidders.
 
-*New challenges*
+**New challenges**
 
 * I will need a scheduler, possibly with a centralized clock
 
-*Changes when iterating*
+**Changes when iterating**
 
 * In case the auction should start immediately we should ~~also start the clock immediately~~ defer to some kind of schedule anyway.
 
-#### Auction starts
+### Auction starts
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/start-auction.png)
 
 Auction can start immediately after it was polished or at a specific start date and time. That depends on how the auctioneer set it up.
 
-*New challenges*
+**New challenges**
 
 * Updating the currently open auction page for all the current viewers will likely require an ongoing connection via something similar to Web Sockets so that the server can send the updates immediately. This will put a burden on the server when there's many concurrent viewers. 
 
@@ -81,7 +75,7 @@ Auction can start immediately after it was polished or at a specific start date 
 
 * When handling a scheduled start auction command, the scheduler creates a new schedule to decrement the current price. Is this idea error-prone? Would it be better to setup the whole schedule for all increments up front and potentially remove it when the auction ends? Probably it would also simplify the code and allow better SRP. Let's remove Decrement Scheduled then and redefine Auction Scheduled from the previous section.
 
-#### Bidder lists and views auctions
+### Bidder lists and views auctions
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/view-auctions.png)
 
@@ -89,11 +83,11 @@ Most of the auction page is static really. Some text and some pictures. But the 
 
 We probably want to let the bidders know about price changes and that an auction has ended immediately while they're still on the auction page.
 
-*New challenges*
+**New challenges**
 
 * As the current price decreases, more bidders will most likely be interested in that particular auction and so that page will get visited more. Did we just find a potential peak period?
 
-#### Current price is decreased by the increment as the clock progresses
+### Current price is decreased by the increment as the clock progresses
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/decrement-current-price.png)
 
@@ -103,12 +97,12 @@ If the previous current price was indeed a minimal price, the auction ends witho
 
 In all these cases the bidders, or people who are viewing the auction page, should probably be notified.
 
-*New challenges*
+**New challenges**
 
 * For this system to remain fair, all the bidders should see the new price as close to the same time as possible. This adds to the argument for synchronizing the clock.
 * Minimal price and proxy bidding checks should be quick but will still require a non-zero amount of time. Maybe it's a good idea to lock the auction at every scheduled increment. This lock should not be noticed by the users.
 
-#### Bidder sets up a proxy bidding
+### Bidder sets up a proxy bidding
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/submit-proxy-bidding.png)
 
@@ -116,7 +110,7 @@ Only possible when the auction is in progress.
 
 The bid should not be lower than the minimal price. If the minimal price is hidden there's a possibility for the bidders to sniff it with this option, if incorrectly implemented.
 
-#### Bidder offers a bid and auction ends with transaction
+### Bidder offers a bid and auction ends with transaction
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/buy-now.png)
 
@@ -124,12 +118,12 @@ Once the auction ends we should immediately disable the option to submit a biddi
 
 Besides properly selecting the first one who decided to make a purchase we need to gracefully inform the bidders who managed to hit Buy now but still did not make it on time.
 
-*New challenges*
+**New challenges**
 
 * There is a race condition when possibly multiple bidders will hit the Buy now button at (close to) the same time. Adds to the argument for syncing the clock.
 * The API handling the Buy now button should expect peaks close to the scheduled current price increments for auctions with clock visible.
 
-### User interface
+## User interface
 
 I would like to have mobile and desktop clients which makes me want to put as much business logic as possible on he server and expose it via the APIs to the UIs that are only responsible for displaying the data really. Here's how I would imagine the UI would roughly look:
 
@@ -141,15 +135,11 @@ The challenges that I was able to see from drawing the UI were already identifie
 * Disabling the purchase options as soon as the auction ends
 * Potential high number of concurrent viewers which will impact the server load and increase the burden on the clock sync solution
 
-### Possible abuse
+## Possible abuse
 
 If I trust [these conclusions](https://clemens.pl/aukcje-holenderskie#bezpieczenstwo), in contrast to classic auctions, Dutch auctions are less prone to the common unfair practices.
 
-## Solving it
-
-Having taken a look at the domain, I can attempt to draft a proposal for the solution.
-
-### Contexts and their functions
+## Drafting the contexts
 
 Looking at the above I will now aim to distil the contexts. I will mainly consider the following factors:
 
@@ -158,77 +148,77 @@ Looking at the above I will now aim to distil the contexts. I will mainly consid
 
 My guts suggest me these initial contexts:
 
-#### Management
+### Management
 
-*Functionality*
+**Functionality**
 
 * Creating, editing and removing auctions by the auctioneer
 * Publishing and unpublishing auctions
 * Calculating auction schedules
 
-*Discussion*
+**Discussion**
 
 Deserves to be there because of a distinct actor, the auctioneer, and because managing auctions will happen considerably less often than viewing and bidding (different scalability).
 
 Groups events that always happen together: management, publishing and scheduling.
 
-*Ideas*
+**Ideas**
 
 An auction will be stored as a set of relational data including its basic properties and a schedule. On top of that we will store the pre-rendered, static version for fast access. Might consider a light version for the list.
 
-#### Pages
+### Pages
 
-*Functionality*
+**Functionality**
 
 * Listing auctions by the bidders
 * Viewing auction pages by the bidders
 * Subscribing to the page updates automatically
 * Exposing the bidding and notification buttons
 
-*Discussion*
+**Discussion**
 
 We're servicing a specific event here: a bidder views the auction page. Considering the previously identified challenges, we can expect high load not only in peak times but also simply because we want to have much more bidders than auctioneers. The other source of increased load will come from refreshing the page by a single bidder just to make sure the price did not drop yet. This will drive how we scale this one.
 
-*Ideas*
+**Ideas**
 
 This context is mainly interested in the pre-rendered static content that it will display on the client. That's really its distinct perspective on the auction entity. We should maybe provide it from memory and distribute it geographically?
 
 When the page it will fetch the current price and the clock from the server and subscribe to the updates of these details in (close to) real time.
 
-#### Updates
+### Updates
 
-*Functionality*
+**Functionality**
 
 * Keeping pages up to date regarding current price and the clock
 
-*Discussion*
+**Discussion**
 
 This will need to scale similarly to Pages. On the other hand it's not the bidder who usually initiates the action here. It's the clock in most cases.
 
 Initially this context was merged with Notifications. Since there may be considerably less bidders subscribed to notifications than bidders who simply view the page, we may need to scale differently.
 
-*Ideas*
+**Ideas**
 
 I think this will be just some kind of API that the clients will connect to to and subscribe to the updates via Web Sockets.
 
-*New challenges*
+**New challenges**
 
 * How will Updates know about the actual changes it needs to forward?
 * There will be multiple users keeping auction pages open for long time. Auctions can be configured to last for over a month. We will have multiple open connections that are very long lasting.
 
-#### Notifications
+### Notifications
 
-*Functionality*
+**Functionality**
 
 * Sending notifications to the subscribers
 
-*Discussion*
+**Discussion**
 
 Very similar to Updates but was extracted due to potentially different scalability needs.
 
-#### Scheduling
+### Scheduling
 
-*Functionality*
+**Functionality**
 
 * Creating schedules
 * Starting auctions
@@ -239,13 +229,13 @@ Very similar to Updates but was extracted due to potentially different scalabili
 * Creating transactions
 * Removing schedules
 
-*Discussion*
+**Discussion**
 
 Seems like there's multiple unrelated functionalities in this context. I decided to put all of them into one because most of them happen at the same time, when the next current price increment needs to happen. Also, probably better to keep schedule logic in one place due to potential changes.
 
 For now there's no compelling reason for further split. Later, when we consider transaction handling it may be smarter to move the related logic to that context.
 
-*Ideas*
+**Ideas**
 
 This seems like a background task to me. It can employ an existing scheduler library like [quantum](https://hex.pm/packages/quantum) that's using familiar crontab metaphor. 
 
@@ -253,20 +243,20 @@ We probably don't want to put all auctions into a single schedule. We should fin
 
 After starting an auction and decrementing the current price we need to update the pages and notify the bidders via Updates context. Maybe we could use events here? Would this address the challenge we noticed with the Updates API?
 
-#### Bidding
+### Bidding
 
-*Functionality*
+**Functionality**
 
 * Accepting proxy biddings
 * Processing buy now requests
 
-*Discussion*
+**Discussion**
 
 Scales similarly to Updates but the initiator is the bidder.
 
 Proxy biddings have been put here due to domain similarities but I can't find any compelling scalability reason. Might want to change it later.
 
-*Ideas*
+**Ideas**
 
 Tackling the challenge of making sure we make the indeed first bidder who hits the Buy now button successful, maybe we could do something very light when accepting that request, like saving the winner ID. This would allow us to lock this operation so the others would wait and then quickly get the negative response.
 
@@ -274,19 +264,27 @@ If we go this route, we would then handle actions that are not urgent (updating 
 
 We need to consider that if we update the pages quickly enough, then we actually get less Buy now requests in the first place.
 
-### Syncing the clock
+## Syncing the clock
 
 Time seems to be important from the point of view of fairness and user experience. 
 
-#### Ensuring every node's time is the same
+### Ensuring every node's time is the same
 
 When we scale different contexts of the system, it becomes important so that each node has the same time. This is especially important for the Scheduling context.
 
 A node is not something that would live forever but maybe long enough to consider potential discrepancies over time. Ensuring proper use of [NTP](https://en.wikipedia.org/wiki/Network_Time_Protocol) should alleviate this problem.
 
-#### Syncing user's clocks
+### Syncing user's clocks
 
 For the scenario when the clock is displayed on the auction page, we can refresh it when updating the current price. This means every hour which is more than enough.
+
+### Time zone conversion
+
+To avoid problems with the browser settings I would initially put user's time zone as a configuration item on their profile.
+
+## Architecture
+
+...
 
 ## Conclusions
 
