@@ -11,6 +11,41 @@ I will use the following sources for the functionality I would like to provide:
 
 Hope you like it!
 
+## Table of contents
+
+* [The language](#the-language)
+* [Exploring the domain](#exploring-the-domain)
+    * [Auctioneer manages their auctions](#auctioneer-manages-their-auctions)
+    * [Auction starts](#auction-starts)
+    * [Bidder lists and views auctions](#bidder-lists-and-views-auctions)
+    * [Current price is decreased by the increment as the clock progresses](#current-price-is-decreased-by-the-increment-as-the-clock-progresses)
+    * [Bidder sets up a proxy bidding](#bidder-sets-up-a-proxy-bidding)
+    * [Bidder offers a bid and auction ends with transaction](#bidder-offers-a-bid-and-auction-ends-with-transaction)
+* [User interface](#user-interface)
+* [Possible abuse](#possible-abuse)
+* [Coming up with bounded contexts](#coming-up-with-bounded-contexts)
+    * [Management](#management)
+    * [Pages](#pages)
+    * [Updates](#updates)
+    * [Bidding](#bidding)
+    * [Increments](#increments)
+    * [Notification](#notification)
+* [Tackling the architecture](#tackling-the-architecture)
+    * [First attempt](#first-attempt)
+    * [Components](#components)
+    * [Management](#management-1)
+    * [Pages and Updates](#pages-and-updates)
+    * [Bidding](#bidding-1)
+    * [Increments](#increments-1)
+    * [Notification](#notification-1)
+    * [Component dependencies](#component-dependencies)
+* [Syncing the clock](#syncing-the-clock)
+    * [Ensuring every node's time is the same](#ensuring-every-nodes-time-is-the-same)
+    * [Syncing user's clocks](#syncing-users-clocks)
+    * [Time zone conversion](#time-zone-conversion)
+* [Monitoring and telemetry as evolution drivers](#monitoring-and-telemetry-as-evolution-drivers)
+* [Some conclusions](#some-conclusions)
+
 ## The language
 
 These are the terms I will be using throughout:
