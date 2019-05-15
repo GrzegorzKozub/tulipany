@@ -293,11 +293,13 @@ I would opt for a single database at the beginning. Smart schemas corresponding 
 
 I would also introduce sharding as soon as possible. I think in this case driven by geography to prepare us to migrate the data to proper data centres in future. Another option would be to find a sharding key that would distribute the load evenly.
 
-**Static content**
+**Static content db**
 
 We could pre-render auction text and images and store it in some high availability in-memory cluster like Redis to speed up page load times.
 
-**What is updates db**
+This costs money. Since this is just static content that does not change often and is subject to browser cache anyway, maybe we could get away with properly distributed CDN?
+
+**Updates db**
 
 This is the dynamic part of auction data, like current price, clock, if the action is still open etc. This data is also viewed on the auction page by the bidders and I would like to keep it updated as frequently as possible. Maybe a similar in-memory solution would help?
 
@@ -358,6 +360,12 @@ Based on the above, I think this will be the approximate dependency diagram on t
 
 ![](https://github.com/GrzegorzKozub/tulipany/raw/master/component-dependencies.png)
 
+The lack of online dependencies towards the background services will potentially increase our independent deployment options and enable us to implement the retry if need be. These at the cost of complexity introduced by events.
+
+Component dependencies once again confirm that the single relational database is a bottleneck. We should monitor the load on this resource at the beginning of our system production lifetime. This can guide us towards choosing the proper sharding key or deciding to split the databases up by bounded context.
+
+Another potential bottleneck is updates db. Especially due to the fact that we expect load at peek times and require it to be very responsive. Possibly a Redis cluster, a solution proven at Twitter, would suffice. At a smaller scale, of course.
+
 ## Syncing the clock
 
 Time seems to be important from the point of view of fairness and user experience. 
@@ -380,13 +388,16 @@ To avoid problems with the browser settings I would initially put user's time zo
 
 ### Testing
 
-### Logging
+* integration
 
 ### Monitoring
+
+* peak times
 
 ### Telemetry
 
 ## Conclusions
 
-* Maybe it would be better to distinct between an auction viewer and a bidder.
+* This will most likely not work. It it an effort of a single person not really experienced in system architecture. Do not implement this at your organization without validating these ideas.
 * It's hard to do this in a one man team. I tried to challenge my own ideas constantly. This is tiring and my skills and knowledge into goes this far. These designs should be team efforts to increase the chance of success.
+* Maybe it would be better to distinct between an auction viewer and a bidder.
