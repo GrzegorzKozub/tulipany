@@ -71,7 +71,7 @@ Auction can start immediately after it was polished or at a specific start date 
 
 * Updating the currently open auction page for all the current viewers will likely require an ongoing connection via something similar to Web Sockets so that the server can send the updates immediately. This will put a burden on the server when there's many concurrent viewers. 
 
-*Changes when iterating*
+**Changes when iterating**
 
 * When handling a scheduled start auction command, the scheduler creates a new schedule to decrement the current price. Is this idea error-prone? Would it be better to setup the whole schedule for all increments up front and potentially remove it when the auction ends? Probably it would also simplify the code and allow better SRP. Let's remove Decrement Scheduled then and redefine Auction Scheduled from the previous section.
 
@@ -283,6 +283,12 @@ Looking at the bounded contexts I came up with this list of components.
 
 Note that for brevity I skipped hosting and serving the web client.
 
+**Thou shalt not start from µ-services**
+
+I know, and if I was going for something like a prototype or a more far reached MVP I would opt for a single API and a single background service to start with. Then monitoring and telemetry comes in to drive (among others) the architecture changes.
+
+In the case of this very exercise I wanted to show a possible architecture approach that might unfold after the product had gained some maturity and its user-base had grown. Granted, I was guessing regarding the load and peek times.
+
 **Do I really need the event bus**
 
 In most cases each context contains an API and a background service. They would communicate via domain events. Now this may be an overkill and we could possibly use something like web hooks or API calls (synchronous domain events?). We would trade temporal coupling here though.
@@ -302,6 +308,10 @@ This costs money. Since this is just static content that does not change often a
 **Updates db**
 
 This is the dynamic part of auction data, like current price, clock, if the action is still open etc. This data is also viewed on the auction page by the bidders and I would like to keep it updated as frequently as possible. Maybe a similar in-memory solution would help?
+
+**Load balancers**
+
+I think we should balance the load to our APIs based on the number of concurrent connections since there's no complex computation involved in any of them really and what we're after is quick response times.
 
 Let's look at how these components handle the context functionality.
 
@@ -384,20 +394,18 @@ For the scenario when the clock is displayed on the auction page, we can refresh
 
 To avoid problems with the browser settings I would initially put user's time zone as a configuration item on their profile.
 
-## Important non-functional requirements
+## Monitoring and telemetry as evolution drivers
 
-### Testing
+Despite the fact that we do our best to predict the peak times and load, our users will never cease to astonish us. No matter the architecture we settle on at the beginning, we should arm our system with monitoring that (besides revealing the errors) will show us the real bottlenecks and anomalies versus our initial thinking.
 
-* integration
+In this specific case telemetry regarding user behaviour around when they usually hit that Buy now button compared to the beginning and the end of the specific price value would help. Also, the idea about the eagerness to refresh the auction page.
 
-### Monitoring
+As we wouldn't like to present many users with a sad explanation that this good was already bought after they hit the Buy now button, we may also gather data on how frequent this is.
 
-* peak times
+Summing it up, besides the domain, monitoring and telemetry data from the living production system will make us make better choices going forward.
 
-### Telemetry
-
-## Conclusions
+## Some conclusions
 
 * This will most likely not work. It it an effort of a single person not really experienced in system architecture. Do not implement this at your organization without validating these ideas.
 * It's hard to do this in a one man team. I tried to challenge my own ideas constantly. This is tiring and my skills and knowledge into goes this far. These designs should be team efforts to increase the chance of success.
-* Maybe it would be better to distinct between an auction viewer and a bidder.
+* Maybe it would be better for the ubiquitous language to distinct between an auction viewer and a bidder.
